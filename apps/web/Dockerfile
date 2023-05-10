@@ -5,9 +5,12 @@ FROM node:lts-alpine AS builder
 # Check https://github.com/nodejs/docker-node/tree/b4117f9333da4138b03a546ec926ef50a31506c3#nodealpine to understand why libc6-compat might be needed.
 RUN apk add --no-cache libc6-compat
 RUN apk update
+RUN corepack enable && corepack prepare pnpm@8.4.0 --activate
+ENV PNPM_HOME="/root/.local/share/pnpm"
+ENV PATH="$PNPM_HOME:$PATH"
 # Set working directory
 WORKDIR /app
-RUN yarn global add turbo
+RUN pnpm i -g turbo
 COPY . .
 RUN turbo prune --scope=@luxiconn/web --docker
 
@@ -15,13 +18,16 @@ RUN turbo prune --scope=@luxiconn/web --docker
 FROM node:lts-alpine AS installer
 RUN apk add --no-cache libc6-compat
 RUN apk update
+RUN corepack enable && corepack prepare pnpm@8.4.0 --activate
+ENV PNPM_HOME="/root/.local/share/pnpm"
+ENV PATH="$PNPM_HOME:$PATH"
 WORKDIR /app
 
 # First install the dependencies (as they change less often)
 COPY .gitignore .gitignore
 COPY --from=builder /app/out/json/ .
-COPY --from=builder /app/out/yarn.lock ./yarn.lock
-RUN yarn install
+COPY --from=builder /app/out/pnpm-lock.yaml ./pnpm-lock.yaml
+RUN pnpm install
 
 # Build the project
 COPY --from=builder /app/out/full/ .
@@ -34,7 +40,7 @@ COPY turbo.json turbo.json
 # ARG TURBO_TOKEN
 # ENV TURBO_TOKEN=$TURBO_TOKEN
 
-RUN yarn turbo run build --filter=web...
+RUN pnpm turbo run build --filter=@luxiconn/web...
 
 FROM node:lts-alpine AS runner
 WORKDIR /app
